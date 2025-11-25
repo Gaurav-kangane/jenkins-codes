@@ -1,0 +1,38 @@
+############################# Day-1 code  ####################################################
+
+
+pipeline{
+    agent any
+    stages{
+        stage('clone'){
+            steps{
+                git branch: 'main', url: 'https://github.com/Gaurav-kangane/Terraform.git'
+            }
+        }
+        
+        stage('init'){
+            steps{
+                dir('Day-1-Basic_code'){
+                    sh 'terraform init'
+                }
+            }
+        }
+        
+        stage('plan'){
+            steps{
+                dir('Day-1-Basic_code'){
+                    sh 'terraform plan'
+                }
+            }
+        }
+        
+        stage('apply'){
+            steps{
+                dir('Day-1-Basic_code'){
+                    sh 'terraform apply -auto-approve'
+                }
+            }
+        }
+        
+    }
+}
