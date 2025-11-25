@@ -1,3 +1,6 @@
+############################# code for master slave concept  ####################################################
+
+
 pipeline{
     agent{
         label 'dev'
