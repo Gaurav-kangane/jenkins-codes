@@ -1,0 +1,192 @@
+###### Frontend server #####################
+
+pipeline{
+    agent{
+        label 'frontend'
+    }
+    
+    stages{
+        
+        stage('root'){
+            steps{
+                sh 'sudo su -'
+            }
+        }
+        
+        stage('gitclone'){
+            steps{
+                git branch: 'main', url: 'https://github.com/CloudTechDevOps/Java-springboot-project.git'
+            }
+        }
+        
+        stage('directory'){
+            steps{
+                dir('frontend'){
+                    sh '''
+                            sudo dnf install -y python3-pip
+                            python3 -m venv venv
+                            source venv/bin/activate
+                            pip install --upgrade pip
+                            pip install streamlit requests
+                       '''
+                }
+            }
+        }
+        
+        stage('deploy frontend'){
+            steps{
+                sh '''
+                    sudo bash -c 'cat > /etc/systemd/system/frontend.service <<EOF
+                            [Unit]
+                            Description=Streamlit Frontend App
+                            After=network.target
+                            
+                            [Service]
+                            User=root
+                            WorkingDirectory=/home/ec2-user/workspace/pipeline-2/frontend
+                            ExecStart=/home/ec2-user/workspace/pipeline-2/frontend/venv/bin/python -m streamlit run /home/ec2-user/workspace/pipeline-2/frontend/app.py --server.port=8501 --server.address=0.0.0.0
+                            Environment=API_URL="http://13.232.27.210:8084"
+                            Restart=always
+                            RestartSec=5
+                            
+                            [Install]
+                            WantedBy=multi-user.target
+                            EOF'
+                    
+                    '''
+            }
+        }
+        
+        stage('start server'){
+            steps{
+                sh '''
+                    sudo systemctl daemon-reload
+                    sudo systemctl enable frontend
+                    sudo systemctl restart frontend
+                    sudo systemctl status frontend
+
+                    '''
+            }
+        }  
+    }
+}
+
+
+
+
+
+############## Backend server #####################
+pipeline {
+    agent any
+
+    environment {
+        SONARQUBE = 'sonar'
+        JAR_NAME = 'datastore-0.0.7.jar'
+    }
+
+    stages {
+
+        stage('SCM') {
+            steps {
+                git branch: 'main', url: 'https://github.com/CloudTechDevOps/Java-springboot-project.git'
+            }
+        }
+
+        stage('Clean') {
+            steps {
+                sh 'mvn clean'
+            }
+        }
+
+        stage('Code Quality') {
+            steps {
+                withSonarQubeEnv(SONARQUBE) {
+                    sh 'mvn clean package -DskipTests=true'
+                    sh 'mvn sonar:sonar'
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                script {
+                    def qg = waitForQualityGate()
+                    if (qg.status != 'OK') {
+                        error "❌ Quality Gate Failed"
+                    }
+                }
+            }
+        }
+
+        stage('Build Package') {
+            steps {
+                sh 'mvn clean package -DskipTests=true'
+            }
+        }
+
+        stage('Copy JAR to Workspace') {
+            steps {
+                sh '''
+                sudo mkdir -p /var/log/app
+                sudo chown -R jenkins:jenkins /var/log/app
+                sudo chmod 777 /var/log/app
+                sudo cp target/${JAR_NAME} ${WORKSPACE}/${JAR_NAME}
+                sudo chmod 755 ${WORKSPACE}/${JAR_NAME}
+                '''
+            }
+        }
+
+        stage('Stop Old Application') {
+            steps {
+                sh '''
+                PID=$(pgrep -f datastore-0.0.7.jar || true)
+                if [ -n "$PID" ]; then
+                    echo "Stopping existing application with PID: $PID"
+                  sudo kill -9 $PID
+                else
+                    echo "No existing application running"
+                fi
+                '''
+            }
+        }
+
+        stage('Run Application') {
+            steps {
+                sh '''
+                sudo nohup java -jar datastore-0.0.7.jar \
+                 --MYSQL_HOST="jdbc:mysql://database-1.cp4s0mqyo7x3.ap-south-1.rds.amazonaws.com:3306/datastore?createDatabaseIfNotExist=true" \
+                 --MYSQL_USERNAME="admin" \
+                 --MYSQL_PASSWORD="Cloud123" \
+                 --LOG_FILE_PATH="/var/log/app/datastore.log" \
+                 --server.port=8084 > /var/log/app/nohup.out 2>&1 &
+                '''
+            }
+        }
+            
+        stage('final'){
+            steps {
+                sh '''
+                nohup java \
+                      -Dspring.datasource.url=jdbc:replace with your rds endpoint:3306/datastore?createDatabaseIfNotExist=true \
+                      -Dspring.datasource.username=admin \
+                      -Dspring.datasource.password=Cloud123 \
+                      -Dspring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQL8Dialect \
+                      -jar datastore-0.0.7.jar \
+                      > /var/log/app/nohup.out 2>&1 &
+                                    '''
+            }
+        
+        }
+    }
+
+    post {
+        success {
+            echo '🎉 Application Deployed Successfully & Running on EC2'
+        }
+        failure {
+            echo '❌ Pipeline Failed'
+        }
+    }
+}
+
+
