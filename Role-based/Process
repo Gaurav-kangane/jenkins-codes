@@ -11,3 +11,18 @@ sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
 sudo yum install jenkins -y
 sudo systemctl enable jenkins
 sudo systemctl start jenkins
+
+
+2. Take the I.P address and port is 8080 e.g http://54.173.111.49:8080 and run cat command for password
+
+3. Go to setting and selct plugins go to available plugins and select Role-based Authorization strategy and stage view and install both.
+
+4. Go to setting and select Security in Authorization choose "role-based strategy" and save and apply.
+
+5. Go to setting and select Users click on create user
+
+6. Go to setting and "Manage and Assign Roles" in Role to add give any name e.g test and give requried permission click on apply and save.
+
+7. click on Assign Roles and in Add User give username that you have created and click on the permission that you want to give to that user.
+
+8. Go to jenkins and create pipeline from admin account and login the user account and check the permission
